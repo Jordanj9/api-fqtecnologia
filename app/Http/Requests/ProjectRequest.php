@@ -29,7 +29,6 @@ class ProjectRequest extends FormRequest
     {
         return [
             'name' => 'required|string|max:255',
-            'description' => 'string|max:255',
             'value' => 'required|integer',
             'type' => 'required|in:project,activity',
         ];

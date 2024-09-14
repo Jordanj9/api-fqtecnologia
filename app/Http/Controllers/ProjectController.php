@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\ProjectRequest;
 use App\Http\Utils;
 use App\Models\Project;
+use Carbon\Carbon;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -53,13 +54,16 @@ class ProjectController extends Controller
             $user = Auth::user();
             $request->merge(['user_id' => $user->id]);
             $project = Project::create($request->all());
+            $project->fresh();
+            $user = $project->user;
+            $project->user = $user;
             return Utils::responseJson(
                 Response::HTTP_NO_CONTENT,
                 'Proyecto creado satisfactoriamente',
                 $project,
                 Response::HTTP_CREATED
             );
-        }catch (Exception $e){
+        } catch (Exception $e) {
             return Utils::responseJson(
                 Response::HTTP_INTERNAL_SERVER_ERROR,
                 'Ha ocurrido un error al procesar la solicitud:',
@@ -72,7 +76,7 @@ class ProjectController extends Controller
     /**
      * Display the specified resource.
      *
-     * @param  int  $id
+     * @param int $id
      * @return JsonResponse
      */
     public function show($id)
@@ -89,7 +93,7 @@ class ProjectController extends Controller
     /**
      * Show the form for editing the specified resource.
      *
-     * @param  int  $id
+     * @param int $id
      * @return \Illuminate\Http\Response
      */
     public function edit($id)
@@ -107,7 +111,7 @@ class ProjectController extends Controller
     public function update(ProjectRequest $request, $id)
     {
         try {
-            $project = Project::find($id);
+            $project = Project::with('user')->find($id);
             $project->update($request->all());
             return Utils::responseJson(
                 Response::HTTP_OK,
@@ -115,7 +119,7 @@ class ProjectController extends Controller
                 $project,
                 Response::HTTP_OK
             );
-        }catch (Exception $e){
+        } catch (Exception $e) {
             return Utils::responseJson(
                 Response::HTTP_INTERNAL_SERVER_ERROR,
                 'Ha ocurrido un error al procesar la solicitud:',
@@ -128,7 +132,7 @@ class ProjectController extends Controller
     /**
      * Remove the specified resource from storage.
      *
-     * @param  int  $id
+     * @param int $id
      * @return JsonResponse
      */
     public function destroy($id)
@@ -144,7 +148,7 @@ class ProjectController extends Controller
                 [],
                 Response::HTTP_OK
             );
-        }catch (Exception $e){
+        } catch (Exception $e) {
             DB::rollBack();
             return Utils::responseJson(
                 Response::HTTP_INTERNAL_SERVER_ERROR,
@@ -153,5 +157,58 @@ class ProjectController extends Controller
                 Response::HTTP_INTERNAL_SERVER_ERROR
             );
         }
+    }
+
+    public function mouthReport(Request $request)
+    {
+        $projects = Project::select(
+            DB::raw('MONTH(created_at) as month'),
+            DB::raw('YEAR(created_at) as year'),
+            DB::raw('COUNT(*) as total'),
+            DB::raw('SUM(value) as total_value')
+        )
+            ->groupBy(DB::raw('YEAR(created_at)'), DB::raw('MONTH(created_at)'))
+            ->get();
+        $year = Carbon::now()->year;
+
+        $months = collect(range(1, 12))->map(function ($month) use ($year) {
+            return [
+                'month' => $month,
+                'year' => $year,
+                'total' => 0,
+                'total_value' => 0
+            ];
+        });
+
+        $projectsByMonth = $months->map(function ($monthData) use ($projects) {
+            $project = $projects->firstWhere('month', $monthData['month']);
+            if ($project) {
+                return [
+                    'month' => $project->month,
+                    'year' => $project->year,
+                    'total' => $project->total,
+                    'total_value' => $project->total_value
+                ];
+            }
+            return $monthData;
+        });
+        return Utils::responseJson(
+            Response::HTTP_OK,
+            'Reporte de proyectos en el año ' . $year . ' satisfactoriamente',
+            $projectsByMonth,
+            Response::HTTP_OK
+        );
+    }
+
+    public function projectTypeReport(){
+        $projectsByType = Project::select('type', DB::raw('COUNT(*) as total'))
+            ->groupBy('type')
+            ->get();
+        return Utils::responseJson(
+            Response::HTTP_OK,
+            'Reporte de tipos de proyectos satisfactoriamente',
+            $projectsByType,
+            Response::HTTP_OK
+        );
     }
 }

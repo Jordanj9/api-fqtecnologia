@@ -27,7 +27,7 @@ class AuthController extends Controller
                 Response::HTTP_BAD_REQUEST,
                 $errorMessage,
                 $validate->errors(),
-                Response::HTTP_OK
+                Response::HTTP_BAD_REQUEST
             );
         }
 
